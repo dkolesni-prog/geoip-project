@@ -36,6 +36,11 @@ func (s *Service) Get(ip string) (*Response, error) {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusNotFound {
+		// IP not found — not an error from our app's perspective
+		return nil, nil
+	}
+
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("geoip: unexpected status %d: %s", resp.StatusCode, body)
@@ -59,19 +64,22 @@ func (s *Service) GetBatch(ips []string) (map[string]*Response, error) {
 
 	for _, ip := range ips {
 		wg.Add(1)
-		ip := ip // capture variable
+		ip := ip
 		go func() {
 			defer wg.Done()
 
 			resp, err := s.Get(ip)
+
 			mu.Lock()
 			defer mu.Unlock()
 
 			if err != nil {
 				errs = multierr.Append(errs, fmt.Errorf("geoip: IP %s: %w", ip, err))
+				results[ip] = nil
 				return
 			}
-			results[ip] = resp
+
+			results[ip] = resp // can be nil if IP was not found (404)
 		}()
 	}
 

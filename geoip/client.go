@@ -1,3 +1,4 @@
+// geoip/client.go
 package geoip
 
 import (
