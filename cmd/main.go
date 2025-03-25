@@ -62,7 +62,7 @@ func main() {
 		}
 
 		if len(ips) == 0 || len(ips) > 100 {
-			http.Error(w, "Please provide between 1 to 100 IP addresses", http.StatusBadRequest)
+			http.Error(w, "Please provide between 1 to 100 IP addresses in text field or upload file", http.StatusBadRequest)
 			return
 		}
 
