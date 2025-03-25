@@ -77,8 +77,13 @@ func main() {
 		case "mmdb":
 			w.Header().Set("Content-Disposition", "attachment; filename=geoip_results.mmdb")
 			w.Header().Set("Content-Type", "application/octet-stream")
-			// 🛠️ TODO: replace with real mmdb generation logic
-			w.Write([]byte("mock mmdb binary content"))
+
+			tmpFile := "geoip_results.mmdb"
+			if err := geoip.GenerateMMDB(results, tmpFile); err != nil {
+				http.Error(w, "failed to generate mmdb: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+			http.ServeFile(w, r, tmpFile)
 			return
 
 		case "csv":
