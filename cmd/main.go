@@ -61,7 +61,12 @@ func main() {
 		}
 
 		w.Header().Set("Content-Type", "text/csv")
-		w.Header().Set("Content-Disposition", "attachment; filename=geoip_results.csv")
+		wantDownload := r.FormValue("download") == "1"
+		if wantDownload {
+			w.Header().Set("Content-Disposition", "attachment; filename=geoip_results.csv")
+		}
+
+		w.Header().Set("Content-Type", "text/csv")
 		writer := csv.NewWriter(w)
 		writer.Write([]string{"IP", "CountryIsoCode"})
 

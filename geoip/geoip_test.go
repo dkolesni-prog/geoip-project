@@ -24,7 +24,11 @@ func TestService_Get(t *testing.T) {
 				return
 			}
 			if res == nil {
-				t.Logf("IP %s not found (nil response)", ip)
+				if ip == "1.1.1.1" {
+					t.Logf("IP %s not found (expected nil)", ip)
+					return
+				}
+				t.Errorf("Expected result for IP %s, got nil", ip)
 				return
 			}
 			if res.CountryIsoCode == "" {
@@ -57,10 +61,18 @@ func TestService_GetBatch(t *testing.T) {
 				t.Errorf("Missing result for IP: %s", ip)
 				return
 			}
+
 			if res == nil {
-				t.Logf("IP %s not found (nil response)", ip)
+				// ❗ Important: we treat these IPs as acceptable nils
+				if ip == "1.1.1.1" || ip == "invalid-ip" {
+					t.Logf("IP %s not found (expected nil)", ip)
+					return
+				}
+				t.Errorf("Expected result for IP %s, got nil", ip)
 				return
 			}
+
+			// Now it's safe to check CountryIsoCode
 			if res.CountryIsoCode == "" {
 				t.Errorf("No country code returned for valid IP: %s", ip)
 			}

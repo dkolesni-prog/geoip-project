@@ -25,6 +25,7 @@ func NewService(client *http.Client, url string) *Service {
 }
 
 func (s *Service) Get(ip string) (*Response, error) {
+	ip = NormalizeIP(ip)
 	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s?ip=%s", s.url, ip), nil)
 	if err != nil {
 		return nil, fmt.Errorf("geoip: creating request failed: %w", err)
@@ -36,18 +37,22 @@ func (s *Service) Get(ip string) (*Response, error) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusNotFound {
-		// IP not found — not an error from our app's perspective
-		return nil, nil
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("geoip: reading response body failed: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("geoip: unexpected status %d: %s", resp.StatusCode, body)
 	}
 
+	// Check if the body is actually an error message (API inconsistency)
+	if string(body) == `{"errorCode":"404","errorMessage":"Не найдено"}` {
+		return nil, nil
+	}
+
 	var response Response
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+	if err := json.Unmarshal(body, &response); err != nil {
 		return nil, fmt.Errorf("geoip: decoding failed: %w", err)
 	}
 
