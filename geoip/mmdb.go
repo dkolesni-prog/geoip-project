@@ -1,14 +1,16 @@
 package geoip
 
 import (
+	"log"
 	"net"
 	"os"
+	"path/filepath"
 
 	"github.com/maxmind/mmdbwriter"
 	"github.com/maxmind/mmdbwriter/mmdbtype"
 )
 
-func GenerateMMDB(results map[string]*Response, filepath string) error {
+func GenerateMMDB(results map[string]*Response, outPath string) error {
 	writer, err := mmdbwriter.New(mmdbwriter.Options{
 		DatabaseType: "GeoIP2-Country",
 		RecordSize:   24,
@@ -26,7 +28,6 @@ func GenerateMMDB(results map[string]*Response, filepath string) error {
 			continue
 		}
 
-		// Convert net.IP to *net.IPNet with /32 for IPv4 or /128 for IPv6
 		var ipNet *net.IPNet
 		if ip.To4() != nil {
 			_, ipNet, _ = net.ParseCIDR(ip.String() + "/32")
@@ -43,17 +44,22 @@ func GenerateMMDB(results map[string]*Response, filepath string) error {
 			},
 		}
 
-		err := writer.Insert(ipNet, entry)
-		if err != nil {
+		if err := writer.Insert(ipNet, entry); err != nil {
 			return err
 		}
 	}
 
-	file, err := os.Create(filepath)
+	safePath := filepath.Clean(outPath)
+	file, err := os.Create(safePath)
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			log.Printf("couldnt close file: %s", err)
+		}
+	}(file)
 
 	_, err = writer.WriteTo(file)
 	return err
