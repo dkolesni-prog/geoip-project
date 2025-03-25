@@ -4,7 +4,6 @@ import (
 	"encoding/csv"
 	"net/http"
 	"os"
-	_ "os"
 
 	"github.com/dkolesni-prog/whois/geoip"
 )
