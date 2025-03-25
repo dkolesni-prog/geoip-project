@@ -12,8 +12,8 @@ type Response struct {
 	IsNewRussia    *bool        `json:"isNewRussia"`
 	OsmAddress     *string      `json:"osmAddress"`
 	Coordinates    *Coordinates `json:"coordinates"`
-	CountryName    string       `json:"country_name"`     // <-- updated
-	CountryIsoCode string       `json:"country_iso_code"` // <-- updated
+	CountryName    string       `json:"country_name"`
+	CountryIsoCode string       `json:"country_iso_code"`
 }
 
 type Coordinates struct {
