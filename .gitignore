@@ -1,0 +1,54 @@
+# IDE and Editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Go build output
+/bin/
+/obj/
+
+# Go vendor directory
+/vendor/
+
+# OS files
+.DS_Store
+
+# Logs and temporary files
+*.log
+tmp/
+
+# Node.js & React
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dist/
+build/
+
+# Docker
+*.dockerignore
+docker-compose.override.yml
+docker-compose.*.yml
+Dockerfile.local
+
+# Env files
+.env
+.env.local
+.env.*.local
+
+# Coverage reports
+coverage/
+coverage.out
+
+# Test binary
+*.test
+
+# Built binaries (Go)
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Output binaries
+main
