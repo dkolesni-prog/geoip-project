@@ -1,4 +1,4 @@
-// cmd/main.go
+// cmd/endpoints.go
 package main
 
 import (
@@ -6,22 +6,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/dkolesni-prog/whois/geoip"
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 )
 
-func main() {
-	client := geoip.NewHTTPClient()
-	service := geoip.NewService(client, "")
-
-	r := chi.NewRouter()
-	r.Use(middleware.Logger)
-
+func registerRoutes(r *chi.Mux, service *geoip.Service) {
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "frontend/build/index.html")
 	})
@@ -37,7 +30,7 @@ func main() {
 			return
 		}
 
-		// 🔍 Handle uploaded file OR manual input
+		// Handle uploaded file OR manual input
 		file, header, fileErr := r.FormFile("file")
 		if fileErr == nil {
 			defer file.Close()
@@ -62,13 +55,13 @@ func main() {
 		}
 
 		if len(ips) == 0 || len(ips) > 100 {
-			http.Error(w, "Please provide between 1 to 100 IP addresses in text field or upload file", http.StatusBadRequest)
+			http.Error(w, "Please provide between 1 to 100 IP addresses", http.StatusBadRequest)
 			return
 		}
 
 		results, err := service.GetBatch(ips)
 		if err != nil {
-			log.Printf("batch lookup error: %v", err)
+			fmt.Printf("batch lookup error: %v\n", err)
 		}
 
 		export := r.FormValue("export")
@@ -78,39 +71,46 @@ func main() {
 			w.Header().Set("Content-Disposition", "attachment; filename=geoip_results.mmdb")
 			w.Header().Set("Content-Type", "application/octet-stream")
 
-			tmpFile := "geoip_results.mmdb"
-			if err := geoip.GenerateMMDB(results, tmpFile); err != nil {
+			tmpFile, err := os.CreateTemp("", "geoip_*.mmdb")
+			if err != nil {
+				http.Error(w, "could not create mmdb temp file", http.StatusInternalServerError)
+				return
+			}
+			defer os.Remove(tmpFile.Name())
+			defer tmpFile.Close()
+
+			if err := geoip.GenerateMMDB(results, tmpFile.Name()); err != nil {
 				http.Error(w, "failed to generate mmdb: "+err.Error(), http.StatusInternalServerError)
 				return
 			}
-			http.ServeFile(w, r, tmpFile)
+			http.ServeFile(w, r, tmpFile.Name())
 			return
 
 		case "csv":
 			w.Header().Set("Content-Disposition", "attachment; filename=geoip_results.csv")
 			fallthrough
-
 		default:
 			w.Header().Set("Content-Type", "text/csv")
 			writer := csv.NewWriter(w)
-			writer.Write([]string{"IP", "CountryIsoCode", "CountryName"})
+			if err := writer.Write([]string{"IP", "CountryIsoCode", "CountryName"}); err != nil {
+				http.Error(w, "Failed to write CSV header", http.StatusInternalServerError)
+				return
+			}
 			for ip, res := range results {
 				code, name := "", ""
 				if res != nil {
 					code = res.CountryIsoCode
 					name = res.CountryName
 				}
-				writer.Write([]string{ip, code, name})
+				if err := writer.Write([]string{ip, code, name}); err != nil {
+					fmt.Printf("error writing row for %s: %v\n", ip, err)
+				}
 			}
 			writer.Flush()
 		}
 	})
-
-	fmt.Println("Listening at :8080")
-	log.Fatal(http.ListenAndServe(":8080", r))
 }
 
-// Parses comma-separated or newline-separated IPs from a textarea input
 func parseManualIPs(input string) []string {
 	parts := strings.FieldsFunc(input, func(r rune) bool {
 		return r == ',' || r == '\n'
@@ -125,26 +125,15 @@ func parseManualIPs(input string) []string {
 	return ips
 }
 
-// Parses .txt files with newline or comma-separated IPs
 func parseTxtFile(r io.Reader) ([]string, error) {
 	content, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}
-	raw := string(content)
-	raw = strings.ReplaceAll(raw, "\n", ",")
-	parts := strings.Split(raw, ",")
-	var ips []string
-	for _, ip := range parts {
-		ip = strings.TrimSpace(ip)
-		if ip != "" {
-			ips = append(ips, ip)
-		}
-	}
-	return ips, nil
+	raw := strings.ReplaceAll(string(content), "\n", ",")
+	return parseManualIPs(raw), nil
 }
 
-// Parses .json file with array of IPs
 func parseJSONFile(r io.Reader) ([]string, error) {
 	var list []string
 	err := json.NewDecoder(r).Decode(&list)
