@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/csv"
 	"net/http"
+	"os"
 	_ "os"
 
 	"github.com/dkolesni-prog/whois/geoip"
@@ -45,12 +46,23 @@ func CheckIPsHandler(service *geoip.Service) http.HandlerFunc {
 		case "mmdb":
 			w.Header().Set("Content-Disposition", "attachment; filename=geoip_results.mmdb")
 			w.Header().Set("Content-Type", "application/octet-stream")
-			tmpFile := "geoip_results.mmdb"
-			if err := geoip.GenerateMMDB(results, tmpFile); err != nil {
+			tmpFile, err := os.CreateTemp("", "geoip_results_*.mmdb")
+			if err != nil {
+				http.Error(w, "failed to create temp file: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+			defer os.Remove(tmpFile.Name())
+			defer tmpFile.Close()
+
+			if err := geoip.GenerateMMDB(results, tmpFile.Name()); err != nil {
 				http.Error(w, "failed to generate mmdb: "+err.Error(), http.StatusInternalServerError)
 				return
 			}
-			http.ServeFile(w, r, tmpFile)
+
+			w.Header().Set("Content-Disposition", "attachment; filename=geoip_results.mmdb")
+			w.Header().Set("Content-Type", "application/octet-stream")
+			http.ServeFile(w, r, tmpFile.Name())
+
 			return
 
 		case "csv":
