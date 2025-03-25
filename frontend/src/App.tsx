@@ -6,12 +6,25 @@ type Result = {
     country: string;
 };
 
+function isValidIP(ip: string): boolean {
+    const ipv4Regex = /^(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)){3}$/;
+    const ipv6Regex = /^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$/;
+    return ipv4Regex.test(ip) || ipv6Regex.test(ip);
+}
+
 function App() {
     const [ips, setIps] = useState('');
+    const [invalidIPs, setInvalidIPs] = useState<string[]>([]);
     const [file, setFile] = useState<File | null>(null);
     const [results, setResults] = useState<Result[]>([]);
     const [error, setError] = useState('');
     const [showAll, setShowAll] = useState(false);
+
+    const validateIps = (input: string) => {
+        const list = input.split(',').map(ip => ip.trim()).filter(Boolean);
+        const invalid = list.filter(ip => !isValidIP(ip));
+        setInvalidIPs(invalid);
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -40,6 +53,7 @@ function App() {
                 return { ip, country };
             });
             setResults(parsed);
+            setShowAll(false);
         } catch (err: any) {
             setError(err.message);
         }
@@ -74,7 +88,11 @@ function App() {
                     <label>Paste up to 100 IPs (comma-separated):</label><br />
                     <textarea
                         value={ips}
-                        onChange={(e) => setIps(e.target.value)}
+                        onChange={(e) => {
+                            const val = e.target.value;
+                            setIps(val);
+                            validateIps(val);
+                        }}
                         rows={4}
                         cols={60}
                         placeholder="192.168.1.1, 8.8.8.8, ..."
@@ -93,19 +111,31 @@ function App() {
                     />
                 </div>
 
-                <button type="submit">Submit</button>
+                <button type="submit" disabled={invalidIPs.length > 0}>
+                    Submit
+                </button>
+
                 {results.length > 0 && (
-                    <>
-                        <button type="button" onClick={handleDownload}>Download CSV</button>
-                    </>
+                    <button type="button" onClick={handleDownload}>Download CSV</button>
                 )}
             </form>
+
+            {invalidIPs.length > 0 && (
+                <div className="error">
+                    <p>Invalid IPs:</p>
+                    <ul>
+                        {invalidIPs.map((ip, idx) => (
+                            <li key={idx}>{ip}</li>
+                        ))}
+                    </ul>
+                </div>
+            )}
 
             {error && <p className="error">{error}</p>}
 
             {results.length > 0 && (
                 <div style={{ marginTop: '2rem' }}>
-                    <h2>Results ({showAll ? results.length : 50} shown)</h2>
+                    <h2>Results ({showAll ? results.length : Math.min(results.length, 50)} shown)</h2>
                     <table border={1} style={{ margin: 'auto', borderCollapse: 'collapse' }}>
                         <thead>
                         <tr>
