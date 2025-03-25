@@ -1,6 +1,8 @@
 package geoip
 
 import (
+	"encoding/json"
+	"io"
 	"net"
 	"strings"
 )
@@ -13,4 +15,28 @@ func NormalizeIP(ip string) string {
 		return ip
 	}
 	return parsed.String()
+}
+
+func ParseTxtFile(r io.Reader) ([]string, error) {
+	content, err := io.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+	raw := string(content)
+	raw = strings.ReplaceAll(raw, "\n", ",")
+	parts := strings.Split(raw, ",")
+	var ips []string
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			ips = append(ips, p)
+		}
+	}
+	return ips, nil
+}
+
+func ParseJSONFile(r io.Reader) ([]string, error) {
+	var list []string
+	err := json.NewDecoder(r).Decode(&list)
+	return list, err
 }

@@ -3,6 +3,7 @@ package main
 
 import (
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -36,18 +37,28 @@ func main() {
 			return
 		}
 
-		file, _, err := r.FormFile("file")
-		if err == nil {
+		// 🔍 Handle uploaded file OR manual input
+		file, header, fileErr := r.FormFile("file")
+		if fileErr == nil {
 			defer file.Close()
-			fileIps, err := parseFile(file)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
+			switch {
+			case strings.HasSuffix(header.Filename, ".json"):
+				ips, err = parseJSONFile(file)
+			case strings.HasSuffix(header.Filename, ".txt"):
+				ips, err = parseTxtFile(file)
+			case strings.HasSuffix(header.Filename, ".csv"):
+				http.Error(w, "CSV uploads are not supported. Use .txt or .json", http.StatusBadRequest)
+				return
+			default:
+				http.Error(w, "Unsupported file type. Upload .txt or .json", http.StatusBadRequest)
 				return
 			}
-			ips = append(ips, fileIps...)
+			if err != nil {
+				http.Error(w, "Failed to parse file: "+err.Error(), http.StatusBadRequest)
+				return
+			}
 		} else {
-			manualIps := r.FormValue("ips")
-			ips = append(ips, parseManualIPs(manualIps)...)
+			ips = parseManualIPs(r.FormValue("ips"))
 		}
 
 		if len(ips) == 0 || len(ips) > 100 {
@@ -57,57 +68,80 @@ func main() {
 
 		results, err := service.GetBatch(ips)
 		if err != nil {
-			log.Printf("errors during batch lookup: %v", err)
+			log.Printf("batch lookup error: %v", err)
 		}
 
-		w.Header().Set("Content-Type", "text/csv")
-		wantDownload := r.FormValue("download") == "1"
-		if wantDownload {
+		export := r.FormValue("export")
+
+		switch export {
+		case "mmdb":
+			w.Header().Set("Content-Disposition", "attachment; filename=geoip_results.mmdb")
+			w.Header().Set("Content-Type", "application/octet-stream")
+			// 🛠️ TODO: replace with real mmdb generation logic
+			w.Write([]byte("mock mmdb binary content"))
+			return
+
+		case "csv":
 			w.Header().Set("Content-Disposition", "attachment; filename=geoip_results.csv")
-		}
+			fallthrough
 
-		w.Header().Set("Content-Type", "text/csv")
-		writer := csv.NewWriter(w)
-		writer.Write([]string{"IP", "CountryIsoCode"})
-
-		for ip, res := range results {
-			country := ""
-			if res != nil {
-				country = res.CountryIsoCode
+		default:
+			w.Header().Set("Content-Type", "text/csv")
+			writer := csv.NewWriter(w)
+			writer.Write([]string{"IP", "CountryIsoCode", "CountryName"})
+			for ip, res := range results {
+				code, name := "", ""
+				if res != nil {
+					code = res.CountryIsoCode
+					name = res.CountryName
+				}
+				writer.Write([]string{ip, code, name})
 			}
-			writer.Write([]string{ip, country})
+			writer.Flush()
 		}
-		writer.Flush()
 	})
 
 	fmt.Println("Listening at :8080")
 	log.Fatal(http.ListenAndServe(":8080", r))
 }
 
+// Parses comma-separated or newline-separated IPs from a textarea input
 func parseManualIPs(input string) []string {
-	fields := strings.Split(input, ",")
+	parts := strings.FieldsFunc(input, func(r rune) bool {
+		return r == ',' || r == '\n'
+	})
 	var ips []string
-	for _, field := range fields {
-		trimmed := strings.TrimSpace(field)
-		if trimmed != "" {
-			ips = append(ips, trimmed)
+	for _, ip := range parts {
+		ip = strings.TrimSpace(ip)
+		if ip != "" {
+			ips = append(ips, ip)
 		}
 	}
 	return ips
 }
 
-func parseFile(file io.Reader) ([]string, error) {
-	content, err := io.ReadAll(file)
+// Parses .txt files with newline or comma-separated IPs
+func parseTxtFile(r io.Reader) ([]string, error) {
+	content, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}
-	lines := strings.Split(string(content), "\n")
+	raw := string(content)
+	raw = strings.ReplaceAll(raw, "\n", ",")
+	parts := strings.Split(raw, ",")
 	var ips []string
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed != "" {
-			ips = append(ips, trimmed)
+	for _, ip := range parts {
+		ip = strings.TrimSpace(ip)
+		if ip != "" {
+			ips = append(ips, ip)
 		}
 	}
 	return ips, nil
+}
+
+// Parses .json file with array of IPs
+func parseJSONFile(r io.Reader) ([]string, error) {
+	var list []string
+	err := json.NewDecoder(r).Decode(&list)
+	return list, err
 }

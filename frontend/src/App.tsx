@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, {useState} from 'react';
 import './App.css';
 
 type Result = {
     ip: string;
     country: string;
+    countryName: string;
 };
 
 function isValidIP(ip: string): boolean {
@@ -46,11 +47,12 @@ function App() {
                 throw new Error(text);
             }
 
+            // ✅ We now assume it’s plain CSV text for preview, not a forced download
             const text = await response.text();
             const rows = text.trim().split('\n').slice(1); // skip header
             const parsed: Result[] = rows.map(row => {
-                const [ip, country] = row.split(',');
-                return { ip, country };
+                const [ip, country, countryName] = row.split(',');
+                return {ip, country, countryName};
             });
             setResults(parsed);
             setShowAll(false);
@@ -59,11 +61,12 @@ function App() {
         }
     };
 
-    const handleDownload = async () => {
+
+    const handleDownload = async (format: 'csv' | 'mmdb') => {
         const formData = new FormData();
         if (ips) formData.append('ips', ips);
         if (file) formData.append('file', file);
-        formData.append('download', '1');
+        formData.append('export', format);
 
         const res = await fetch('/check_ips', {
             method: 'POST',
@@ -75,17 +78,20 @@ function App() {
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'geoip_results.csv';
+            a.download = `geoip_results.${format}`;
             a.click();
+        } else {
+            alert('Failed to download ' + format.toUpperCase());
         }
     };
+
 
     return (
         <div className="App">
             <h1>GeoIP Batch Lookup</h1>
             <form onSubmit={handleSubmit}>
                 <div>
-                    <label>Paste up to 100 IPs (comma-separated):</label><br />
+                    <label>Paste up to 100 IPs (comma-separated):</label><br/>
                     <textarea
                         value={ips}
                         onChange={(e) => {
@@ -100,10 +106,10 @@ function App() {
                 </div>
 
                 <div>
-                    <label>Or upload a .txt or .csv file:</label><br />
+                    <label>Or upload a .txt (comma or newline separated) or .json file (array of IPs):</label><br/>
                     <input
                         type="file"
-                        accept=".txt,.csv"
+                        accept=".txt,.json"
                         onChange={(e) => {
                             const files = e.target.files;
                             if (files && files.length > 0) setFile(files[0]);
@@ -111,21 +117,23 @@ function App() {
                     />
                 </div>
 
-                <button type="submit" disabled={invalidIPs.length > 0}>
-                    Submit
-                </button>
+                <button type="submit" disabled={invalidIPs.length > 0}>Check IPs</button>
 
                 {results.length > 0 && (
-                    <button type="button" onClick={handleDownload}>Download CSV</button>
+                    <div style={{marginTop: '1rem'}}>
+                        <button type="button" onClick={() => handleDownload('csv')}>Download CSV</button>
+                        <button type="button" onClick={() => handleDownload('mmdb')}>Download MMDB</button>
+                    </div>
                 )}
             </form>
 
+
             {invalidIPs.length > 0 && (
-                <div className="error">
-                    <p>Invalid IPs:</p>
+                <div className="error" style={{marginTop: '1rem', textAlign: 'left'}}>
+                    <p>⚠️ Invalid IPs detected:</p>
                     <ul>
                         {invalidIPs.map((ip, idx) => (
-                            <li key={idx}>{ip}</li>
+                            <li key={idx} style={{color: 'red'}}>{ip}</li>
                         ))}
                     </ul>
                 </div>
@@ -134,13 +142,15 @@ function App() {
             {error && <p className="error">{error}</p>}
 
             {results.length > 0 && (
-                <div style={{ marginTop: '2rem' }}>
+                <div style={{marginTop: '2rem'}}>
                     <h2>Results ({showAll ? results.length : Math.min(results.length, 50)} shown)</h2>
-                    <table border={1} style={{ margin: 'auto', borderCollapse: 'collapse' }}>
+                    <table border={1} style={{margin: 'auto', borderCollapse: 'collapse'}}>
                         <thead>
                         <tr>
                             <th>IP</th>
                             <th>Country Code</th>
+                            <th>Country Name</th>
+                            {/* ✅ New column */}
                         </tr>
                         </thead>
                         <tbody>
@@ -148,9 +158,12 @@ function App() {
                             <tr key={i}>
                                 <td>{res.ip}</td>
                                 <td>{res.country}</td>
+                                <td>{res.countryName}</td>
+                                {/* ✅ New column */}
                             </tr>
                         ))}
                         </tbody>
+
                     </table>
                     {results.length > 50 && (
                         <button onClick={() => setShowAll(prev => !prev)}>
