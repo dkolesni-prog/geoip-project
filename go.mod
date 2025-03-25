@@ -1,5 +1,4 @@
-module whois
-
+module github.com/dkolesni-prog/whois
 go 1.23.7
 
 require (

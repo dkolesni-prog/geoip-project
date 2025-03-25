@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	"geoip"
+	"github.com/dkolesni-prog/whois/geoip"
 
 	"go.uber.org/zap"
 )
