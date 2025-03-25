@@ -2,12 +2,10 @@
 package main
 
 import (
+	"github.com/dkolesni-prog/whois/internal/server"
 	"log"
 	"net/http"
 	"time"
-
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/dkolesni-prog/whois/geoip"
 )
@@ -22,10 +20,7 @@ func run() error {
 	client := geoip.NewHTTPClient()
 	service := geoip.NewService(client, "")
 
-	r := chi.NewRouter()
-	r.Use(middleware.Logger)
-
-	registerRoutes(r, service)
+	r := server.NewRouter(service)
 
 	srv := &http.Server{
 		Addr:         ":8080",
